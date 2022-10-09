@@ -1,0 +1,132 @@
+from ars import *
+from hcsr04 import HCSR04
+from time import sleep
+from dcmotor import DCMotor       
+from machine import Pin, PWM   
+from time import sleep    
+import webrepl
+webrepl.start(password="12345678")
+ 
+rssi = {}
+#main_networks = ["WE_90C31E_EXT", "MicroPython-AP", "WE_90C31E"]
+old_time = 0
+x = []
+led_status = 0
+frequency = 1000
+pin1 = Pin(4, Pin.OUT)
+pin2 = Pin(5, Pin.OUT)     
+pin3 = Pin(14, Pin.OUT)     
+enable = PWM(pin3, frequency)  
+dc_motor = DCMotor(pin1, pin2, enable)      
+
+pin4 = Pin(13, Pin.OUT)    
+pin5 = Pin(15, Pin.OUT)     
+pin6 = Pin(12, Pin.OUT)     
+enable2 = PWM(pin6, frequency)  
+dc_motor2 = DCMotor(pin4, pin5, enable2)      
+
+m1_speed = 0
+m2_speed = 0
+f_angle = 0
+first = True
+o_error = 0
+def localServerMethods(self, method, data):
+    global rssi, x, old_time, dc_motor, first, f_angle, o_error
+    try:
+        if first:
+            f_angle = data[1][0]
+            first = False
+        irs = data[0]
+        angle = data[1][0]
+        distance = data[2]
+        print(data, f_angle, angle, distance)
+        #if irs[1] == 0 and abs(f_angle - angle) > 10:
+        #    f_angle += 90
+        
+        if time.time() % 20 == 0:
+            error = ( angle - f_angle )
+            if error > 0 :
+                forward(100, 100 - error )
+            else:
+                forward(100 + error, 100)
+        if (10 + time.time()) % 20 == 0:
+            f_angle += 90
+        else:
+            dc_motor.stop()
+            dc_motor2.stop()
+    except Exception as e:
+        print(e)
+        pass
+    #return {"METHOD": "RESPONSE", "METHOD": "led_data", "DATA": led_status}
+
+def forward(speed_1, speed_2):
+    if speed_1 > 100:
+        speed_2 -= (speed_1 - 100)
+        speed_1 = 100
+
+    elif speed_2 > 100:
+        speed_1 -= (speed_2 - 100)
+        speed_2 = 100
+    speed_1 = max(0, speed_1)
+    speed_2 = max(0, speed_2)
+    print(speed_1, speed_2)
+    if speed_1 < 20:
+        dc_motor.stop()
+    else:
+        dc_motor.forward(speed_1)
+    if speed_2 < 20:
+        dc_motor2.stop()
+    else:
+        dc_motor2.forward(speed_2)
+
+def backwards(speed_1, speed_2):
+    if speed_1 > 100:
+        speed_2 -= (speed_1 - 100)
+        speed_1 = 100
+
+    elif speed_2 > 100:
+        speed_1 -= (speed_2 - 100)
+        speed_2 = 100
+    dc_motor.backwards(speed_1)
+    dc_motor2.backwards(speed_2)
+
+'''
+def right(speed_1, speed_2):
+    dc_motor.backwards(speed_1)
+    dc_motor2.backwards(speed_2)
+
+def left(speed_1, speed_2):
+    dc_motor.backwards(speed_2)
+    dc_motor2.backwards(speed_1)
+'''
+
+def mainServerMethods(self, method, data, topic, msg_id):
+    print(".")
+    '''
+    global led_status
+    if topic == "led_data":
+        state = int(data)
+        led_status = state
+        led = Pin(2, Pin.OUT)
+        if state == 1:
+            led.off()
+        else:
+            led.on()
+    distance = sensor.distance_cm()
+    data = {
+                "METHOD": "RESPONSE",
+                "DATA": distance,
+                "TOPIC": "ULTRASONIC_DATA",
+                "MESSAGE_ID": msg_id
+            }
+    print("sending", data)
+    print(distance)
+    sleep(1)
+    return data
+    '''
+    pass
+
+Node.localServerMethods = localServerMethods
+Node.mainServerMethods = mainServerMethods
+node = Node()
+uasyncio.run(node.main())

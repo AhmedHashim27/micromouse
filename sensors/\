@@ -1,0 +1,141 @@
+#=================Libs=============================
+import socket
+import json
+import uasyncio
+import network
+import time
+from machine import Pin, ADC
+import hc04 as hc
+from hmc5883l import HMC5883L
+
+#=====================================pins==================
+u = hc.HCSR04(16, 10)
+u1 = hc.HCSR04(14, 16) # left
+u2 = hc.HCSR04(13, 15) # back
+u3 = hc.HCSR04(0, 2) # right
+#ir = [Pin(14, Pin.IN), ADC(0), Pin(13, Pin.IN)]
+
+d, d1, d2, d3 = 0, 0, 0, 0
+#==================================functions=================
+def readIR():
+        global ir
+        return [ir[0].value(), int(ir[1].read() > 1000), ir[2].value()]
+        v = []
+        for i in ir:
+                v.append(i.value())
+        return v
+
+import machine
+import utime
+
+
+def ultrasonic():
+  echo = ADC(0)
+  trig = machine.Pin(10, machine.Pin.OUT)
+  trig.off()
+  utime.sleep_us(2)
+  trig.on()
+  utime.sleep_us(10)
+  trig.off()
+  while echo.read() == 0:
+    print(".")
+  t1 = utime.ticks_us()
+  while echo.read() == 1:
+    print("-")
+  t2 = utime.ticks_us()
+  cm = (t2 - t1) / 29.1
+  return cm
+
+async def send(data, sock):
+	data = json.dumps(data).encode()
+	try:
+		recved = False
+		sock.sendto(data, ("192.168.4.1", 50505))
+		msg, addr = sock.recvfrom(1024)
+		if msg:
+			data = json.loads(msg.decode())
+			method = data["METHOD"]
+			data = data["DATA"]
+			if method == "led_data":
+				led(data)
+
+	except Exception as e:
+		print('-', data, e)
+                pass
+	await uasyncio.sleep(0)
+
+def led(state):
+	state = int(state)
+	led = Pin(2, Pin.OUT)
+	if state == 1:
+		led.off()
+	else:
+		led.on()
+
+def connect_wifi():
+	ap_if = network.WLAN(network.AP_IF)
+	ap_if.active(False)
+	sta_if = network.WLAN(network.STA_IF);
+	sta_if.active(True)
+	sta_if.connect("MicroPython-AP", "123456789")
+	while not sta_if.isconnected():
+		pass
+
+	ip = sta_if.ifconfig()[0]
+	print("connected -", ip)
+	return ip
+
+async def localServerMethods(method, data):
+	print(method, data)
+
+async def listenServer(server):
+	try:
+		data = bytearray()
+		data, addr = server.recvfrom(1024)
+		data = json.loads(data.decode())
+		print(data)
+		method = data["METHOD"]
+		response = json.dumps(localServerMethods(method, data["DATA"]))
+		print(data)
+		if response:
+			server.sendto(response.encode(), addr)
+		else:
+			server.sendto(b'\r\n', addr)
+	except Exception as e:
+		pass
+	await uasyncio.sleep(0)
+
+async def main():
+        global d, d1, d2, d3
+	ip = connect_wifi()
+	#ip = "192.168.4.3"
+	server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+	server.bind((ip, 30303))
+	server.settimeout(0.001)
+	print("Start")
+	listener = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+	listener.bind((ip, 10101))
+	listener.settimeout(0.001)
+	while True:
+		try:
+			#data = [[x[0], x[3]] for x in network.WLAN(network.STA_IF).scan()]
+                        comp = HMC5883L()
+			x,y,z = comp.read()
+                        x, y, z = comp.format_result(x, y, z)
+                        d = (u.distance_mm() + d) / 2
+                        d1 = (u1.distance_mm() + d1) / 2
+                        d2 = (u2.distance_mm() + d2) / 2
+                        d3 = (u3.distance_mm() + d3) / 2
+                        print(d, d1, d2, d3)
+                        #print(x, y, z, readIR(), u.distance_mm())
+			#send({"METHOD": 'RSSI', "DATA": {"networks": data, "point_name": 1}}, server)
+			#await send({"METHOD": 'RSSI', "DATA": {"networks": data, "point_name": 1}}, server)
+			await send({"METHOD": 'IRS', "DATA": [[d3, d, d1], [x, y, z], d2]}, server)
+			#await send({"METHOD": 'Ultra', "DATA": u.distance_mm()}, server)
+			#await listenServer(listener)
+			await uasyncio.sleep(0)
+		except Exception as e:
+			print(e)
+			pass
+		
+uasyncio.run(main())
