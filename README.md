@@ -33,10 +33,6 @@ You'll need the following components:
 ### 2. Clone the Repository
 First, download the project files. Open your terminal and run:
 
-```bash
-git clone https://github.com/your-username/micromouse.git
-cd micromouse
-```
 
 ### 3. Install the Arduino IDE
 Make sure you have the Arduino IDE installed on your computer. You can download it from [here](https://www.arduino.cc/en/software).
